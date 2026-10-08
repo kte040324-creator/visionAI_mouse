@@ -75,8 +75,11 @@ export const CUES = {
     bubble: { left: 1202, top: 398, width: 1477, height: 238 },
   },
   11: {
-    lines: [[{ text: '위쪽을 바라보면 변화된 공간으로 이동해요' }]],
-    bubble: { left: 1421, top: 398, width: 1037, height: 167 },
+    lines: [
+      [{ text: '마우스를 위로 올려' }],
+      [{ text: '새로운 공간으로 이동해보세요' }],
+    ],
+    bubble: { left: 1421, top: 398, width: 1037, height: 238 },
   },
   12: {},
   16: {

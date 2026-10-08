@@ -32,7 +32,7 @@ const SPEECH_WAIT_MAX_MS = 20000;
 //   4  이제 각자의 새싹을 가만히 바라봐 주세요 / 꽃이 피어야 이 거리에 온전히 뿌리내릴 수 있어요
 //   5  [이름]과 [이름]의 새싹들이 반응하고 있어요 / 뿌리가 더 단단하게 자랄 수 있도록 조금만 더 바라봐주세요
 //   9  여러분들이 피운 새싹들이 도시와 더 어우러질 수 있도록 / 함께 화면을 바라봐주세요
-//  11  위쪽을 바라보면 변화된 공간으로 이동해요
+//  11  마우스를 위로 올려 / 새로운 공간으로 이동해보세요
 const CURSOR_CUES = new Set([4, 5, 9, 11]);
 // 마지막 안내를 다 읽고 이만큼 더 보여 준 뒤에 글자·구슬을 지우고 도감 카드로 넘어간다.
 const CARD_HOLD_MS = 3000;
@@ -43,11 +43,8 @@ const CARD_WAIT_MAX_MS = 20000;
 // 카드가 들어오면 오브는 완전히 가려진다(.agentLayerOff 의 0.6초). 그래도 붙어 있는 동안은
 // three.js 루프와 blur(2px) 가 계속 돌아 카드 연출의 프레임을 먹으므로, 다 사라지면 떼어 낸다.
 const AGENT_FADE_MS = 600;
-// 도감 카드가 뜬 뒤 이만큼 지나면 조건 없이 처음 화면으로 돌아간다.
-// FlowIdleGuard 의 무활동 복귀와 별개인 안전장치다. 엔딩에서는 휴대폰 연동 메시지가 계속 오가서
-// '활동 중'으로 잡히면 무활동 판정이 영영 안 설 수 있다.
+// 마지막 QR·도감 카드가 뜬 뒤 이만큼 지나면 인원과 상관없이 처음으로 돌아간다.
 const CARD_HOME_MS = 40000;
-
 function bubbleBox(bubble) {
   return {
     left: bubble.left + bubble.width / 2,
@@ -253,7 +250,6 @@ export default function EndingPage() {
   const [leaving, setLeaving] = useState(false);
   const leaveTimer = useRef(0);
   const cardTimer = useRef(0);
-  // 타이머가 중간에 다시 걸리지 않도록 최신 함수만 ref 에 담아 둔다(FlowIdleGuard 와 같은 방식).
   const goHomeRef = useRef(null);
   goHomeRef.current = () => {
     resetFlow();
@@ -408,7 +404,6 @@ export default function EndingPage() {
     return () => window.clearTimeout(timer);
   }, [cardsOn]);
 
-  // 카드가 뜬 뒤 CARD_HOME_MS 가 지나면 무조건 처음으로. 다음 사람을 위해 흐름과 휴대폰 연결을 비운다.
   useEffect(() => {
     if (!cardsOn) return undefined;
     const timer = window.setTimeout(() => goHomeRef.current(), CARD_HOME_MS);

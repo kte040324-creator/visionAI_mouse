@@ -649,3 +649,53 @@
   background-clip: text;
   color: transparent;
 }
+
+.mouseNotice {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 50px 140px;
+  border: 1.048px solid #fff;
+  border-radius: 90.726px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.2)),
+    linear-gradient(173.45deg, rgba(255, 255, 255, 0) 36.667%, rgba(255, 37, 40, 0.2) 92.111%),
+    linear-gradient(189.9deg, rgba(255, 251, 146, 0.55) 14.557%, rgba(255, 255, 255, 0.6) 68.283%, rgba(219, 181, 255, 0.8) 96.301%);
+  box-shadow:
+    0 0 60.484px #fff,
+    0 0 151.21px #fff,
+    0 0 20.863px rgba(255, 255, 255, 0.78),
+    inset 0 8.653px 12.097px #fff;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, calc(-50% + 18px));
+  transition:
+    opacity 0.8s cubic-bezier(0.42, 0, 0.58, 1),
+    transform 0.8s cubic-bezier(0.42, 0, 0.58, 1);
+}
+
+.mouseNoticeOn {
+  opacity: 1;
+  transform: translate(-50%, -50%);
+}
+
+.mouseNotice p {
+  margin: 0;
+  font-size: 70px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -1.4px;
+  white-space: nowrap;
+  background: linear-gradient(90deg, #002545 0%, #195f25 25.808%, #1b546b 52.404%, #061725 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}

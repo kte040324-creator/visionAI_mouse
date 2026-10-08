@@ -112,9 +112,9 @@ function originFor(slot, index, marks) {
   if (mark) return { left: (mark.nx ?? 0.5) * 100, top: (mark.ny ?? 0.5) * 100, fromMark: true };
   return { ...slotPoint(slot, 1.65), fromMark: false };
 }
-const PLANT_DWELL_MS = 3000;
 const SELECT_URL = '/street/outline/api/segmentation/select';
 const SELECT_MS = 100;
+const HOLD_PLANT_MS = 3000;
 const PANO_W = 3840;
 const PANO_H = 1648;
 
@@ -635,7 +635,11 @@ const StreetCanvas = forwardRef(function StreetCanvas({
   const onPlantRef = useRef(onPlant);
   const marksRef = useRef(marks);
   const viewerRef = useRef(activeViewerId);
-  const { gazeRef } = useEntryFlow();
+  const { gazeRef, reportDwellProgress } = useEntryFlow();
+  const reportDwellRef = useRef(reportDwellProgress);
+  reportDwellRef.current = reportDwellProgress;
+  const buttonDownRef = useRef(false);
+  const holdRef = useRef(null);
   const [pendingCircle, setPendingCircle] = useState(null);
 
   viewerRef.current = activeViewerId;
@@ -834,8 +838,10 @@ const StreetCanvas = forwardRef(function StreetCanvas({
       pending.anchorX = snap.sx;
       pending.anchorY = snap.sy;
       pending.lastInZoneAt = now;
-      const elapsed = now - pending.since;
-      const dwellProgress = Math.min(1, elapsed / PLANT_DWELL_MS);
+      const hold = holdRef.current;
+      const dwellProgress = buttonDownRef.current && hold && hold.objectId === snap.id
+        ? Math.min(1, (now - hold.since) / HOLD_PLANT_MS)
+        : 0;
       setPendingCircle({ x: snap.sx, y: snap.sy, progress: dwellProgress, zone: snap.id });
       return { dwellProgress, target: 'canvas', ...cursorPos };
   }, [clearPending, hitMark, screenToNormalized]);
@@ -895,30 +901,60 @@ const StreetCanvas = forwardRef(function StreetCanvas({
   }, [phase, repeatDwell, clearPending, applyPoint, gazeRef]);
 
   useEffect(() => {
-    if (phase !== 'gaze') return undefined;
+    const stopHold = () => {
+      buttonDownRef.current = false;
+      holdRef.current = null;
+      reportDwellRef.current(0);
+    };
+    const onDown = (event) => {
+      if (event.button !== 0 || event.pointerType === 'touch') return;
+      if (introLockRef.current || phaseRef.current !== 'gaze') return;
+      if (!screenToNormalized(event.clientX, event.clientY)) return;
+      buttonDownRef.current = true;
+      applyPoint(event.clientX, event.clientY, 'pointer');
+    };
+    const onUp = () => {
+      if (!buttonDownRef.current) return;
+      stopHold();
+    };
     let frame = 0;
-    let lastPaint = 0;
     const tick = () => {
       frame = requestAnimationFrame(tick);
+      if (!buttonDownRef.current || phaseRef.current !== 'gaze') return;
       const pending = pendingRef.current;
-      if (!pending || (!repeatRef.current && plantedRef.current)) return;
-      const elapsed = Date.now() - pending.since;
-      const progress = Math.min(1, elapsed / PLANT_DWELL_MS);
-      const now = Date.now();
-      if (now - lastPaint > 70) {
-        lastPaint = now;
-        setPendingCircle({
-          x: pending.anchorX,
-          y: pending.anchorY,
-          progress,
-          zone: pending.objectId,
-        });
+      if (!pending || (!repeatRef.current && plantedRef.current)) {
+        if (holdRef.current) {
+          holdRef.current = null;
+          reportDwellRef.current(0);
+        }
+        return;
       }
-      if (elapsed >= PLANT_DWELL_MS) finishPlant(pending.anchorX, pending.anchorY);
+      const hold = holdRef.current;
+      if (!hold || hold.objectId !== pending.objectId) {
+        holdRef.current = { since: Date.now(), objectId: pending.objectId };
+        reportDwellRef.current(0);
+        return;
+      }
+      const progress = Math.min(1, (Date.now() - hold.since) / HOLD_PLANT_MS);
+      reportDwellRef.current(progress);
+      if (progress < 1) return;
+      const anchorX = pending.anchorX;
+      const anchorY = pending.anchorY;
+      stopHold();
+      finishPlant(anchorX, anchorY);
     };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [phase, finishPlant]);
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('pointerup', onUp, true);
+    window.addEventListener('pointercancel', onUp, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      stopHold();
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('pointerup', onUp, true);
+      window.removeEventListener('pointercancel', onUp, true);
+    };
+  }, [applyPoint, finishPlant, screenToNormalized]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

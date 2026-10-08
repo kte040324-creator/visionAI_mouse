@@ -40,8 +40,22 @@ const TELLS = [
       </>
     ),
   },
+];
+
+const OPENING_SPEECH = {
+  7: '아스팔트와 콘크리트로 가득한 서울 속에, 조금 더 많은 자연이 더해진다면 어떤 모습일까요?',
+  8: '우리가 바라보는 시선 끝에는 모두 각자의 관심이 담겨 있습니다. 그 시선과 목소리를 따라 내가 원하는 식물을 도시 곳곳에 더해보세요.',
+  9: '한 사람의 관심에서 시작된 작은 상상이 모이고 모여, 서울의 풍경을 바꾸고 자연과 공존하는 서울을 만들어갑니다.',
+  13: '여러분이 상상하는 서울은 어떤 모습인가요?',
+  14: '이제 상상하는 서울을 직접 그려볼 시간이에요.',
+  15: '먼저, 여러분이 생각하는 서울의 모습을 이야기하며 서로의 생각을 나눠볼게요.',
+};
+const OPENING_SPEECH_FRAMES = Object.keys(OPENING_SPEECH).map(Number);
+const SPEECH_START_MS = 1800;
+const LEAD = [
   {
-    id: 10,
+    kind: 'tell',
+    speech: '온시를 통해 앞으로 우리가 만들어갈 서울이 어떤 모습으로 변화할 수 있을지 만나볼 수 있어요.',
     text: (
       <>
         <b>ONSI</b>를 통해 앞으로 우리가 만들어갈 서울이
@@ -50,20 +64,23 @@ const TELLS = [
       </>
     ),
   },
+  {
+    kind: 'ask',
+    speech: '그럼 시작해볼까요?',
+    text: <>그럼 시작해볼까요?</>,
+  },
+  {
+    kind: 'ask',
+    speech: '두 분이 함께 화면 앞에 나란히 서주세요. 서로의 생각을 모아 서울의 모습을 만들어볼게요.',
+    text: (
+      <>
+        두 분이 함께 화면 앞에 나란히 서주세요
+        <br />
+        서로의 생각을 모아 서울의 모습을 만들어볼게요
+      </>
+    ),
+  },
 ];
-
-const OPENING_SPEECH = {
-  7: '아스팔트와 콘크리트로 가득한 서울 속에, 조금 더 많은 자연이 더해진다면 어떤 모습일까요?',
-  8: '우리가 바라보는 시선 끝에는 모두 각자의 관심이 담겨 있습니다. 그 시선과 목소리를 따라 내가 원하는 식물을 도시 곳곳에 더해보세요.',
-  9: '한 사람의 관심에서 시작된 작은 상상이 모이고 모여, 서울의 풍경을 바꾸고 자연과 공존하는 서울을 만들어갑니다.',
-  10: '온시를 통해 앞으로 우리가 만들어갈 서울이 어떤 모습으로 변화할 수 있을지 만나볼 수 있어요.',
-  13: '여러분이 상상하는 서울은 어떤 모습인가요?',
-  14: '이제 상상하는 서울을 직접 그려볼 시간이에요.',
-  15: '먼저, 여러분이 생각하는 서울의 모습을 이야기하며 서로의 생각을 나눠볼게요.',
-  17: '그럼 시작해볼까요?',
-};
-const OPENING_SPEECH_FRAMES = Object.keys(OPENING_SPEECH).map(Number);
-const SPEECH_START_MS = 1800;
 
 function agentPose(frame) {
   let diameter = 2567;
@@ -123,17 +140,19 @@ function holdFor(frame) {
   if (frame === 2) return 760;
   if (frame === 3) return 1750;
   if (frame === 4) return 2400;
-  if (frame === 5) return 2800;
+  if (frame === 5) return 4800;
   if (frame === 16) return 2200;
+  if (frame === 17) return 900;
   if (frame === 11 || frame === 12) return 1800;
   if (frame === 18) return 1700;
   if (frame === 19) return 1500;
-  if ([7, 8, 9, 10, 13, 14, 15, 17].includes(frame)) return 6800;
+  if (frame === 10) return 400;
+  if ([7, 8, 9, 13, 14, 15].includes(frame)) return 6800;
   return HOLD_MS;
 }
 
 function agentSpeaking(frame) {
-  return [1, 2, 7, 8, 9, 10, 13, 14, 15, 17].includes(frame);
+  return [1, 2, 7, 8, 9, 13, 14, 15].includes(frame);
 }
 
 export default function Opening() {
@@ -144,6 +163,7 @@ export default function Opening() {
   const [scale, setScale] = useState(1);
   const [poseReady, setPoseReady] = useState(false);
   const [frame, setFrame] = useState(5);
+  const [lead, setLead] = useState(null);
   speechOutputRef.current = speechOutput;
 
   useLayoutEffect(() => {
@@ -170,12 +190,44 @@ export default function Opening() {
   }, [router]);
 
   useEffect(() => {
+    LEAD.forEach((line) => speechOutputRef.current.warm(line.speech));
+  }, []);
+
+  useEffect(() => {
     if (OPENING_SPEECH[frame]) speechOutputRef.current.warm(OPENING_SPEECH[frame]);
     const upcomingFrame = OPENING_SPEECH_FRAMES.find((speechFrame) => (
       speechFrame >= frame + (OPENING_SPEECH[frame] ? 1 : 0)
     ));
     if (upcomingFrame) speechOutputRef.current.warm(OPENING_SPEECH[upcomingFrame]);
   }, [frame]);
+
+  useEffect(() => {
+    if (lead == null) return undefined;
+    const line = LEAD[lead];
+    if (!line) return undefined;
+    let cancelled = false;
+    let advanceTimer = 0;
+    const startTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      speechOutputRef.current.speak(line.speech, () => {
+        if (cancelled) return;
+        advanceTimer = window.setTimeout(() => {
+          if (lead + 1 < LEAD.length) {
+            setLead(lead + 1);
+            return;
+          }
+          setLead(null);
+          setFrame(7);
+        }, 500);
+      });
+    }, SPEECH_START_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(startTimer);
+      window.clearTimeout(advanceTimer);
+      speechOutputRef.current.stopSpeaking();
+    };
+  }, [lead]);
 
   useEffect(() => {
     const speechLine = OPENING_SPEECH[frame];
@@ -212,6 +264,10 @@ export default function Opening() {
         });
         return;
       }
+      if (frame === 6) {
+        setLead(0);
+        return;
+      }
       setFrame((current) => current + 1);
     }, holdFor(frame));
     return () => window.clearTimeout(timer);
@@ -228,9 +284,13 @@ export default function Opening() {
           <div className={styles.cityBloom} style={{ opacity: bloomOpacity(frame) }}>
             <img src={frame >= 8 ? '/op/title-bg-blur.png' : '/op/title-bg.png'} alt="" />
           </div>
+          <div className={`${styles.mouseNotice} ${frame === 5 ? styles.mouseNoticeOn : ''}`} aria-hidden="true">
+            <p>ONSI는 마우스를 사용해 진행됩니다</p>
+            <p>안내에 따라 마우스를 움직이며 체험해 주세요</p>
+          </div>
           <div className={`${styles.agentMove} ${poseReady ? styles.agentMoveOn : ''}`} style={agentStyle(frame)}>
-            <div className={`${styles.agentFloat} ${agentSpeaking(frame) ? styles.agentSpeaking : ''}`}>
-              <OpeningAgent speaking={agentSpeaking(frame)} />
+            <div className={`${styles.agentFloat} ${agentSpeaking(frame) || lead != null ? styles.agentSpeaking : ''}`}>
+              <OpeningAgent speaking={agentSpeaking(frame) || lead != null} />
             </div>
           </div>
           <div className={`${styles.cardScene} ${frame === 11 || frame === 12 ? styles.cardSceneOn : ''}`}>
@@ -240,7 +300,7 @@ export default function Opening() {
               <img className={styles.frameCenter} src="/op/op10-frame-center.png" alt="" />
             </div>
           </div>
-          <div className={`${styles.floor} ${agentSpeaking(frame) || frame === 11 || frame === 12 ? styles.floorOn : ''}`} />
+          <div className={`${styles.floor} ${agentSpeaking(frame) || lead != null || frame === 11 || frame === 12 ? styles.floorOn : ''}`} />
           {TELLS.map((item) => (
             <div
               key={item.id}
@@ -262,11 +322,14 @@ export default function Opening() {
               여러분이 <b>상상하는 서울</b>은 어떤 모습인가요?
             </p>
           </div>
-          <div className={`${styles.pill} ${styles.pillAsk} ${frame === 17 ? styles.copyOn : ''}`}>
-            <p className={styles.askCopy} aria-hidden="true">
-              그럼 시작해볼까요?
-            </p>
-          </div>
+          {LEAD.map((line, index) => (
+            <div
+              key={line.speech}
+              className={`${styles.pill} ${line.kind === 'tell' ? styles.pillTell : styles.pillAsk} ${lead === index ? styles.copyOn : ''}`}
+            >
+              <p className={line.kind === 'tell' ? styles.tellCopy : styles.askCopy} aria-hidden="true">{line.text}</p>
+            </div>
+          ))}
         </div>
       </div>
       ) : null}
