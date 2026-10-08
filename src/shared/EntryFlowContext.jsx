@@ -3,7 +3,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -11,12 +10,9 @@ import {
 import { useRouter } from 'next/router';
 import { useGazeEngine } from './gaze/useGazeEngine';
 import { VIEWER_BY_CAM } from './gaze/participants';
-import GazeCameraFeeds from './gaze/GazeCameraFeeds';
-import GazeDebugHud from './gaze/GazeDebugHud';
-import { loadGazeSession, saveGazeSession } from './gaze/gazeSession';
+import { saveGazeSession } from './gaze/gazeSession';
 
 const EntryFlowContext = createContext(null);
-const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 // 거리뷰 토론(/2)은 한 사람이 조작하는 단계라 1번 참가자의 시선만 쓴다.
 const PRIMARY_VIEWER_ID = VIEWER_BY_CAM.A;
@@ -57,15 +53,9 @@ export function EntryFlowProvider({ children }) {
     streetPreloadRef.current = image;
   }, [districtName]);
 
-  // 운영자가 카메라를 잡고 보정을 마친 뒤 시작을 누르면 참여 화면으로 넘어간다.
-  const [setupComplete, setSetupComplete] = useState(false);
-
-  // 자식 페이지의 보정 화면 이동보다 먼저 복원해야, 1페이지가 보정을 다시 요구하지 않는다.
-  useIsoLayoutEffect(() => {
-    if (loadGazeSession()?.setupComplete) setSetupComplete(true);
-  }, []);
-  // DEV ONLY: 최종 파일에서 제거. 시선 보정 없이 마우스 좌표로 이후 인터랙션을 진행한다.
-  const [mouseDev, setMouseDev] = useState(false);
+  // 시선 보정은 쓰지 않는다. 마우스 좌표가 예전 시선 좌표 자리를 대신한다.
+  const [setupComplete, setSetupComplete] = useState(true);
+  const [mouseDev, setMouseDev] = useState(true);
 
   const gazeHandlersRef = useRef({});
   const gazeClipRef = useRef(null);
@@ -141,19 +131,8 @@ export function EntryFlowProvider({ children }) {
     }
   }, []);
 
-  const gazeEnabled = router.pathname !== '/mobile';
-  const engine = useGazeEngine({ onSample: registerGazeSample, enabled: gazeEnabled });
+  const engine = useGazeEngine({ onSample: registerGazeSample, enabled: false });
   gazeRefHolder.current = engine.gazeRef;
-
-  // ?dev=1 이면 카메라 없이 마우스를 시선으로 쓴다(/2 뿐 아니라 /5 등 커서가 뜨는 화면 확인용).
-  useEffect(() => {
-    if (!router.isReady || router.pathname === '/mobile') return undefined;
-    const dev = router.query?.dev;
-    if (dev !== '1' && dev !== 'true') return undefined;
-    setMouseDev(true);
-    setSetupComplete(true);
-    return undefined;
-  }, [router.isReady, router.pathname, router.query.dev]);
 
   const handleGazeClipChange = useCallback((clip) => {
     setGazeClip(clip);
@@ -301,9 +280,7 @@ export function EntryFlowProvider({ children }) {
 
   return (
     <EntryFlowContext.Provider value={value}>
-      {gazeEnabled ? <GazeCameraFeeds videoRefs={engine.videoRefs} /> : null}
       {children}
-      {gazeEnabled ? <GazeDebugHud diagRef={engine.diagRef} gazeRef={engine.gazeRef} /> : null}
     </EntryFlowContext.Provider>
   );
 }
