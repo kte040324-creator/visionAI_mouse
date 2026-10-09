@@ -1,0 +1,32 @@
+.pip {
+  position: fixed;
+  left: 16px;
+  top: 16px;
+  z-index: 12000;
+  width: 220px;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border: 1.5px solid rgba(255, 255, 255, 0.78);
+  border-radius: 10px;
+  background: #111;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.38);
+  pointer-events: none;
+}
+
+.video,
+.boxes {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.video {
+  display: block;
+  object-fit: cover;
+  background: #111;
+}
+
+.boxes {
+  pointer-events: none;
+}

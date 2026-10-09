@@ -6,9 +6,9 @@ import { PRESENCE } from './presence';
 import usePresenceLink from './usePresenceLink';
 
 /**
- * 체험 흐름(/1~/5)에서 통과 인원이 2명 아래로 30초 유지되면 /pre_opening 으로 되돌린다.
- * 마우스·시선·가만히 서 있는 것은 복귀 조건이 아니다. 2명이 엔딩을 보고 있어도 그대로 둔다.
- * 인원 수는 /presence_test 가 보내는 통과 인원과 같다.
+ * 체험 흐름(/1~/5)에서 아직 2명 통과가 확인되지 않았고, 통과 인원이 2명 아래로 30초 유지되면 /pre_opening 으로 되돌린다.
+ * 한 번 2명이 통과하면 이후 얼굴이 잠깐 빠져도 체험을 끊지 않는다.
+ * 마우스·시선·가만히 서 있는 것은 복귀 조건이 아니다.
  *
  * 판정 상태를 보려면 주소에 ?idleDebug=1 을 붙인다(브라우저에 기억됨). ?idleDebug=0 으로 끈다.
  */
@@ -47,6 +47,8 @@ export default function FlowIdleGuard() {
   const keptRef = useRef(null);
   const belowSinceRef = useRef(0);
   const firedRef = useRef(false);
+  // 한 번이라도 2명이 통과하면, 이후 얼굴이 잠깐 빠져도 체험을 /pre_opening 으로 끊지 않는다.
+  const pairedRef = useRef(false);
   const [debug, setDebug] = useState(false);
   const [debugText, setDebugText] = useState('');
 
@@ -58,9 +60,11 @@ export default function FlowIdleGuard() {
   };
 
   const onMessage = useCallback((msg) => {
+    if (msg.type === 'pass' || msg.passAt) pairedRef.current = true;
     const state = msg.type === 'state' ? msg : msg.type === 'joined' && msg.state ? msg.state : null;
     if (!state || typeof state.kept !== 'number') return;
     keptRef.current = state.kept;
+    if (state.kept >= PRESENCE.people) pairedRef.current = true;
   }, []);
 
   const link = usePresenceLink('display', onMessage);
@@ -93,6 +97,14 @@ export default function FlowIdleGuard() {
   }, [debug, active, router.pathname, link.connected]);
 
   useEffect(() => {
+    if (router.pathname !== IDLE_RESET.home) return;
+    pairedRef.current = false;
+    keptRef.current = null;
+    belowSinceRef.current = 0;
+    firedRef.current = false;
+  }, [router.pathname]);
+
+  useEffect(() => {
     if (!active) return undefined;
     firedRef.current = false;
     belowSinceRef.current = 0;
@@ -101,7 +113,7 @@ export default function FlowIdleGuard() {
       if (firedRef.current) return;
       const count = keptRef.current;
       const now = performance.now();
-      if (count == null || count >= PRESENCE.people) {
+      if (pairedRef.current || count == null || count >= PRESENCE.people) {
         belowSinceRef.current = 0;
         return;
       }

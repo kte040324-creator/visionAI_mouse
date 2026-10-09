@@ -44,15 +44,10 @@ function readStageScale() {
   const next = Math.max(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H);
   return next > 0 ? next : 1;
 }
-const AFTER_LINE_MS = 0;
-const VEIL_FADE_MS = 1150;
-const AFTER_VEIL_MS = 1000;
-
-function spokenHoldMs(text) {
-  const chars = Array.from(text.replace(/\s/g, '')).length;
-  return Math.max(1600, chars * 240);
-}
-const AFTER_USER_MS = 0;
+const VEIL_FADE_MS = 700;
+const AFTER_VEIL_MS = 120;
+const AFTER_USER_MS = 1600;
+const SPEECH_FAIL_MS = 8000;
 const MIC_LIMIT_MS = 10000;
 const INTRO_LINE = '함께 선택해주신 이 서울을 실현하기 위해, 삭막한 지금의 거리에서 식물이 필요한 곳을 차례대로 바라보며 토론을 통해 의견을 나눠볼게요';
 const CLOSE_LINE = '토론이 종료 되었어요. 이제 의견을 모아볼게요!';
@@ -167,18 +162,24 @@ async function fetchAgentLine(payload, signal) {
 function AgentLine({ text, balanced = false }) {
   const shellRef = useRef(null);
   const seqRef = useRef(0);
-  const [layers, setLayers] = useState([]);
-  const [liveId, setLiveId] = useState(0);
   const incoming = String(text || '').trim();
-  const activeNow = [...layers].reverse().find((layer) => layer.on);
-  if ((activeNow?.text || '') !== incoming) {
-    seqRef.current += 1;
-    const fading = layers.map((layer) => ({ ...layer, on: false }));
-    const next = incoming
-      ? [...fading, { id: seqRef.current, text: incoming, on: true }]
-      : fading;
-    setLayers(next.slice(-2));
-  }
+  const [layers, setLayers] = useState(() => (
+    incoming ? [{ id: 1, text: incoming, on: true }] : []
+  ));
+  const [liveId, setLiveId] = useState(() => (incoming ? 1 : 0));
+
+  useLayoutEffect(() => {
+    setLayers((prev) => {
+      const activeNow = [...prev].reverse().find((layer) => layer.on);
+      if ((activeNow?.text || '') === incoming) return prev;
+      seqRef.current += 1;
+      const fading = prev.map((layer) => ({ ...layer, on: false }));
+      const next = incoming
+        ? [...fading, { id: seqRef.current, text: incoming, on: true }]
+        : fading;
+      return next.slice(-2);
+    });
+  }, [incoming]);
 
   useLayoutEffect(() => {
     const shell = shellRef.current;
@@ -213,19 +214,20 @@ function AgentLine({ text, balanced = false }) {
       return undefined;
     }
     if (liveId === active.id) return undefined;
-    const frame = window.requestAnimationFrame(() => setLiveId(active.id));
-    return () => window.cancelAnimationFrame(frame);
+    setLiveId(active.id);
+    return undefined;
   }, [layers, liveId]);
 
-  if (!layers.length) return null;
+  const visible = layers.length ? layers : (incoming ? [{ id: 0, text: incoming, on: true }] : []);
+  if (!visible.length) return null;
 
   return (
     <div ref={shellRef} className={styles.promptShell}>
-      {layers.map((layer) => (
+      {visible.map((layer) => (
         <p
-          key={layer.id}
+          key={layer.id || layer.text}
           data-line={layer.on ? '1' : '0'}
-          className={`${styles.promptText} ${layer.id === liveId ? styles.promptTextOn : ''}`}
+          className={`${styles.promptText} ${layer.id === liveId || (!liveId && layer.on) ? styles.promptTextOn : ''}`}
         >
           {promptLines(layer.text, balanced).map((line, index) => (
             <span key={`${layer.id}-${index}`}>
@@ -356,13 +358,13 @@ export default function DiscussionStep({
     const job = queueRef.current.shift();
     if (!job) return;
     pumpingRef.current = true;
-    const minHold = spokenHoldMs(job.line);
     let settled = false;
     let playbackStarted = false;
     const reveal = () => {
       if (job.display === false || !aliveRef.current) return;
       setAgentLine(job.line);
     };
+    reveal();
     const finish = () => {
       if (settled) return;
       settled = true;
@@ -371,28 +373,26 @@ export default function DiscussionStep({
       if (aliveRef.current) job.onEnd?.();
       pumpSpeech();
     };
-    const armWatchdog = () => {
-      window.clearTimeout(hangRef.current);
-      hangRef.current = window.setTimeout(finish, minHold + 12000);
-    };
     speechOutputRef.current.speak(job.line, () => {
-      if (!playbackStarted) reveal();
-      window.setTimeout(finish, AFTER_LINE_MS);
+      reveal();
+      finish();
     }, () => {
-      if (!playbackStarted) reveal();
+      reveal();
       job.onAudioEnd?.();
       if (job.releaseOnAudio) finish();
     }, () => {
       if (playbackStarted) return;
       playbackStarted = true;
+      window.clearTimeout(hangRef.current);
       reveal();
-      armWatchdog();
       job.onStart?.();
+      hangRef.current = window.setTimeout(finish, 28000);
     });
     hangRef.current = window.setTimeout(() => {
       if (playbackStarted || settled) return;
+      reveal();
       finish();
-    }, 45000);
+    }, SPEECH_FAIL_MS);
   }, []);
 
   const say = useCallback((key, line, onEnd, onAudioEnd, releaseOnAudio, display = true, onStart) => {
@@ -420,14 +420,24 @@ export default function DiscussionStep({
     window.clearTimeout(dockTimerRef.current);
     dockTimerRef.current = window.setTimeout(() => {
       if (aliveRef.current) setBeat('dock');
-    }, 2600);
+    }, 720);
   }, [reportStreetUnveiled]);
 
   useEffect(() => {
     const speech = speechOutputRef.current;
+    speech.warm(INTRO_LINE);
     speech.warm(LINE_83);
     speech.warm(gazeLine('A'));
+    speech.warm(gazeLine('B'));
     speech.warm(MIC_LINE);
+    speech.warm(CLOSE_LINE);
+    speech.warm(FLOW1_CLOSE_LINE);
+    speech.warm('NABI님의 의견을 수집했어요!');
+    speech.warm('SORA님의 의견을 수집했어요!');
+    FLOW1_ZONES.forEach((zone) => {
+      speech.warm(zone.look);
+      speech.warm(zone.askOther);
+    });
     speech.warm(NABI_CALIBRATION_LINE);
     speech.warm(CALIBRATION_HANDOFF_LINE);
     speech.warm(CALIBRATION_COMPLETE_LINE);
@@ -555,12 +565,8 @@ export default function DiscussionStep({
 
   useEffect(() => {
     if (calibrationFlow !== 'done') return;
-    if (pageCalibrationRef.current) {
-      beginUnveil();
-      say('intro', INTRO_LINE, undefined, undefined, false, false);
-      return;
-    }
-    say('intro', INTRO_LINE, beginUnveil, beginUnveil, true, false);
+    beginUnveil();
+    say('intro', INTRO_LINE, undefined, undefined, false, false);
   }, [beginUnveil, calibrationFlow, say]);
 
   useEffect(() => {
@@ -572,19 +578,19 @@ export default function DiscussionStep({
       say('close', FLOW1 ? FLOW1_CLOSE_LINE : CLOSE_LINE);
       const timer = window.setTimeout(() => {
         if (beatRef.current === 'close') setBeat('gather');
-      }, 5200);
+      }, 1600);
       return () => window.clearTimeout(timer);
     }
     if (beat === 'gather') {
       const timer = window.setTimeout(() => {
         if (beatRef.current === 'gather') setBeat(FLOW1 ? 'analyze' : 'wait');
-      }, 3400);
+      }, 900);
       return () => window.clearTimeout(timer);
     }
     if (beat === 'wait') {
       const timer = window.setTimeout(() => {
         if (beatRef.current === 'wait') setBeat('analyze');
-      }, 2800);
+      }, 700);
       return () => window.clearTimeout(timer);
     }
     if (beat === 'analyze') {
@@ -610,7 +616,7 @@ export default function DiscussionStep({
         finished.finally(() => {
           document.documentElement.classList.remove('discussion-page-transition');
         });
-      }, 2800);
+      }, 800);
       return () => window.clearTimeout(timer);
     }
     return undefined;
@@ -671,18 +677,13 @@ export default function DiscussionStep({
       const cam = speakerRef.current.cam;
       const line = gazeLine(cam);
       let armed = false;
-      let timer = 0;
       const openGaze = () => {
         if (armed || beatRef.current !== 'gaze') return;
         armed = true;
-        window.clearTimeout(timer);
         setGazeOpen(true);
       };
-      say(`gaze-${cam}`, line, openGaze, openGaze, false, true, () => {
-        if (armed || beatRef.current !== 'gaze') return;
-        timer = window.setTimeout(openGaze, Math.round(spokenHoldMs(line) * 0.28));
-      });
-      return () => window.clearTimeout(timer);
+      say(`gaze-${cam}`, line, openGaze, openGaze);
+      return undefined;
     }
     if (beat === 'speak') {
       let micArmed = false;
@@ -758,7 +759,7 @@ export default function DiscussionStep({
       const timer = window.setTimeout(() => {
         timerDone = true;
         go();
-      }, 1000);
+      }, 200);
       fetchSummaryLine(marksLiveRef.current).then((text) => {
         line = text;
         ready = true;
@@ -782,19 +783,14 @@ export default function DiscussionStep({
     if (beat === 'f1Gaze') {
       const zone = FLOW1_ZONES[zoneRef.current];
       let armed = false;
-      let timer = 0;
       const openGaze = () => {
         if (armed || beatRef.current !== 'f1Gaze') return;
         armed = true;
-        window.clearTimeout(timer);
         streetRef.current?.releaseLook?.();
         setGazeOpen(true);
       };
-      say(`f1-gaze-${zone.id}`, zone.look, openGaze, openGaze, false, true, () => {
-        if (armed || beatRef.current !== 'f1Gaze') return;
-        timer = window.setTimeout(openGaze, Math.round(spokenHoldMs(zone.look) * 0.28));
-      });
-      return () => window.clearTimeout(timer);
+      say(`f1-gaze-${zone.id}`, zone.look, openGaze, openGaze);
+      return undefined;
     }
     if (beat === 'f1Speak') {
       let micArmed = false;
@@ -851,7 +847,7 @@ export default function DiscussionStep({
             window.clearTimeout(homeTimer);
             setBeat('close');
           };
-          homeTimer = window.setTimeout(go, 7000);
+          homeTimer = window.setTimeout(go, 500);
           if (!streetRef.current?.recenter(go, { release: false })) go();
         });
       };
@@ -877,7 +873,7 @@ export default function DiscussionStep({
     const next = beat === 'ask1' ? 'reply1' : 'reply2';
     const key = `${beat}-${speakerRef.current.cam}`;
     const followUp = beat === 'ask1' ? 1 : 2;
-    const timeout = window.setTimeout(() => controller.abort(), 2200);
+    const timeout = window.setTimeout(() => controller.abort(), 8000);
     const run = async () => {
       const local = fallbackAsk(historyRef.current, followUp, recentPromptsRef.current);
       const line = await fetchAgentLine({
@@ -894,13 +890,14 @@ export default function DiscussionStep({
       const spoken = line || local;
       recentPromptsRef.current = [...recentPromptsRef.current.slice(-7), spoken];
       historyRef.current = [...historyRef.current, { role: 'assistant', text: spoken }];
+      setAgentLine(spoken);
       let micArmed = false;
       const openReply = () => {
         if (micArmed || cancelled || beatRef.current !== beat) return;
         micArmed = true;
         setBeat(next);
       };
-      say(key, spoken, openReply, openReply);
+      say(key, spoken, openReply);
     };
     run();
     return () => {

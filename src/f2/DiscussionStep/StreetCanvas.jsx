@@ -751,7 +751,8 @@ const StreetCanvas = forwardRef(function StreetCanvas({
     for (const mark of marksRef.current) {
       const el = markRefs.current[mark.id];
       if (!el || el.style.opacity === '0') continue;
-      const box = el.getBoundingClientRect();
+      const badge = el.querySelector('[data-badge]');
+      const box = (badge || el).getBoundingClientRect();
       const pad = 28;
       if (x >= box.left - pad && x <= box.right + pad && y >= box.top - pad && y <= box.bottom + pad) {
         return mark.id;
@@ -1049,16 +1050,18 @@ const StreetCanvas = forwardRef(function StreetCanvas({
               ref={(el) => {
                 markRefs.current[mark.id] = el;
               }}
-              className={`${styles.plantMark} ${mark.cam === 'B' ? styles.markB : styles.markA} ${quiet ? styles.markQuiet : ''} ${gather ? styles.markGather : ''} ${mark.tucked ? styles.markTuck : ''}`}
+              className={`${styles.plantMark} ${mark.lines.length ? styles.markSpoken : ''} ${mark.cam === 'B' ? styles.markB : styles.markA} ${quiet ? styles.markQuiet : ''} ${gather ? styles.markGather : ''} ${mark.tucked ? styles.markTuck : ''}`}
               style={{
                 left: `${(mark.nx ?? 0.5) * 100}%`,
                 top: `${(mark.ny ?? 0.5) * 100}%`,
                 ...(gather ? { opacity: 0 } : {}),
               }}
             >
-              <span className={styles.badge}>
-                {mark.cam === 'B' ? <SoraBadge uid={`sora-${mark.id}`} /> : <NabiBadge uid={`nabi-${mark.id}`} />}
-              </span>
+              <div className={styles.badgeSlot} data-badge="">
+                <span className={styles.badge}>
+                  {mark.cam === 'B' ? <SoraBadge uid={`sora-${mark.id}`} /> : <NabiBadge uid={`nabi-${mark.id}`} />}
+                </span>
+              </div>
               {mark.lines.length > 0 && (
                 <div className={styles.speech}>
                   <div className={styles.bubble}>

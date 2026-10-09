@@ -9,10 +9,12 @@ const listeners = new Set();
 let session = null;
 let stopTimer = 0;
 let lastStatus = 'idle';
+let sessionVideo = null;
 
 function emit(frame) {
   if (frame.status) lastStatus = frame.status;
-  listeners.forEach((listener) => listener(frame));
+  const payload = sessionVideo ? { ...frame, video: sessionVideo } : frame;
+  listeners.forEach((listener) => listener(payload));
 }
 
 function emitStatus(status) {
@@ -29,6 +31,7 @@ function startSession(camera) {
   const video = document.createElement('video');
   video.muted = true;
   video.playsInline = true;
+  sessionVideo = video;
 
   const handle = {
     stop() {
@@ -38,6 +41,7 @@ function startSession(camera) {
       stream?.getTracks().forEach((track) => track.stop());
       stream = null;
       video.srcObject = null;
+      if (sessionVideo === video) sessionVideo = null;
       landmarker?.close();
       landmarker = null;
     },

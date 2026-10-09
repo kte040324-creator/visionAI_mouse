@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 const SPEECH_REVISION = 'opening-reference-23';
 const PITCH_RATE = 1.06;
 
-const AFTER_AUDIO_MS = 160;
+const AFTER_AUDIO_MS = 80;
+const SPEECH_FETCH_MS = 4500;
 
 function loadSpeech(text, cacheRef, inflightRef) {
   const spoken = String(text || '').trim();
@@ -13,19 +14,23 @@ function loadSpeech(text, cacheRef, inflightRef) {
   if (cached) return Promise.resolve(cached);
   const pending = inflightRef.current.get(cacheKey);
   if (pending) return pending;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SPEECH_FETCH_MS);
   const task = fetch('/api/discussion-speech', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text: spoken }),
+    signal: controller.signal,
   }).then(async (response) => {
     if (!response.ok) throw new Error('speech failed');
     const blob = await response.blob();
     if (!blob.size) throw new Error('empty audio');
     const cache = cacheRef.current;
     cache.set(cacheKey, blob);
-    if (cache.size > 12) cache.delete(cache.keys().next().value);
+    if (cache.size > 24) cache.delete(cache.keys().next().value);
     return blob;
   }).finally(() => {
+    clearTimeout(timer);
     if (inflightRef.current.get(cacheKey) === task) inflightRef.current.delete(cacheKey);
   });
   inflightRef.current.set(cacheKey, task);
@@ -77,6 +82,23 @@ export function useSpeechOutput() {
     haltRef.current = null;
   }, []);
 
+  const ensureAudio = useCallback(() => {
+    if (typeof window === 'undefined') return null;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    if (!audioCtxRef.current) {
+      const ctx = new AudioCtx();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.72;
+      analyser.connect(ctx.destination);
+      audioCtxRef.current = ctx;
+      analyserRef.current = analyser;
+    }
+    audioCtxRef.current.resume?.();
+    return audioCtxRef.current;
+  }, []);
+
   const stopSpeaking = useCallback(() => {
     sessionRef.current += 1;
     clearUnlock();
@@ -89,8 +111,16 @@ export function useSpeechOutput() {
 
   useEffect(() => {
     setIsSupported(typeof window !== 'undefined' && (typeof Audio !== 'undefined' || 'speechSynthesis' in window));
+    const unlock = () => {
+      ensureAudio();
+      unlockRef.current?.();
+    };
+    window.addEventListener('pointerdown', unlock, true);
+    window.addEventListener('keydown', unlock, true);
     return () => {
       sessionRef.current += 1;
+      window.removeEventListener('pointerdown', unlock, true);
+      window.removeEventListener('keydown', unlock, true);
       clearUnlock();
       stopAudio();
       window.cancelAnimationFrame(levelLoopRef.current);
@@ -99,7 +129,7 @@ export function useSpeechOutput() {
       audioCtxRef.current?.close?.();
       if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
     };
-  }, [clearUnlock, stopAudio]);
+  }, [clearUnlock, ensureAudio, stopAudio]);
 
   const speak = useCallback((text, onEnd, onAudioEnd, onPlaybackStart) => {
     const spoken = String(text || '').trim();
@@ -112,6 +142,7 @@ export function useSpeechOutput() {
     sessionRef.current = session;
     clearUnlock();
     stopAudio();
+    ensureAudio();
     window.speechSynthesis?.cancel();
 
     let finished = false;
@@ -158,18 +189,8 @@ export function useSpeechOutput() {
 
     const playBlob = async (blob) => {
       if (finished || session !== sessionRef.current) return;
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) throw new Error('no audio');
-      if (!audioCtxRef.current) {
-        const ctx = new AudioCtx();
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 512;
-        analyser.smoothingTimeConstant = 0.72;
-        analyser.connect(ctx.destination);
-        audioCtxRef.current = ctx;
-        analyserRef.current = analyser;
-      }
-      const ctx = audioCtxRef.current;
+      const ctx = ensureAudio();
+      if (!ctx) throw new Error('no audio');
       const decoded = await ctx.decodeAudioData((await blob.arrayBuffer()).slice(0));
       if (finished || session !== sessionRef.current) return;
       const source = ctx.createBufferSource();
@@ -211,17 +232,46 @@ export function useSpeechOutput() {
       window.addEventListener('keydown', unlock, true);
     };
 
-    loadSpeech(spoken, cacheRef, inflightRef).then((blob) => {
+    const playElement = async (blob) => {
       if (finished || session !== sessionRef.current) return;
-      return playBlob(blob);
-    }).catch((error) => {
-      if (error?.name === 'AbortError' || finished || session !== sessionRef.current) return;
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.playbackRate = PITCH_RATE;
+      let halted = false;
+      haltRef.current = () => {
+        halted = true;
+        audio.pause();
+        URL.revokeObjectURL(url);
+      };
+      audio.onended = () => {
+        if (halted || session !== sessionRef.current) return;
+        URL.revokeObjectURL(url);
+        onAudioEnd?.();
+        window.setTimeout(finish, AFTER_AUDIO_MS);
+      };
+      await audio.play();
+      if (halted || finished || session !== sessionRef.current) return;
+      setIsSpeaking(true);
+      onPlaybackStart?.();
+    };
+
+    loadSpeech(spoken, cacheRef, inflightRef).then(async (blob) => {
+      if (finished || session !== sessionRef.current || !blob) return;
+      try {
+        await playBlob(blob);
+      } catch (error) {
+        if (finished || session !== sessionRef.current) return;
+        if (error?.name === 'AbortError') return;
+        await playElement(blob);
+      }
+    }).catch(() => {
+      if (finished || session !== sessionRef.current) return;
       onAudioEnd?.();
       finish();
     });
 
     return true;
-  }, [clearUnlock, stopAudio, stopLevel]);
+  }, [clearUnlock, ensureAudio, stopAudio, stopLevel]);
 
   const warm = useCallback((text) => {
     loadSpeech(text, cacheRef, inflightRef).catch(() => {});

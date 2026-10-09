@@ -376,13 +376,24 @@ export default forwardRef(function StreetPanorama({
         const el = markRefs.current?.[mark.id];
         if (!el) return;
         const point = worldToScreen(mark.direction, view.yaw, view.pitch, view.fov, view.aspect);
+        const spoken = (mark.lines?.length || 0) > 0;
         if (!point) {
-          el.style.opacity = '0';
+          if (!spoken) {
+            el.style.opacity = '0';
+            return;
+          }
+          el.style.opacity = '1';
+          if (!el.style.left) {
+            el.style.left = `${(mark.nx ?? 0.5) * 100}%`;
+            el.style.top = `${(mark.ny ?? 0.42) * 100}%`;
+          }
           return;
         }
+        const x = spoken ? Math.min(0.72, Math.max(0.22, point.x)) : point.x;
+        const y = spoken ? Math.min(0.58, Math.max(0.24, point.y)) : point.y;
         el.style.opacity = '1';
-        el.style.left = `${point.x * 100}%`;
-        el.style.top = `${point.y * 100}%`;
+        el.style.left = `${x * 100}%`;
+        el.style.top = `${y * 100}%`;
       });
     };
 
@@ -404,7 +415,7 @@ export default forwardRef(function StreetPanorama({
         target.yaw = next.yaw;
         target.pitch = next.pitch;
       }
-      const follow = 1 - Math.exp(-dt / (homing ? 980 : gazeDriven ? 240 : 140));
+      const follow = 1 - Math.exp(-dt / (homing ? 180 : gazeDriven ? 160 : 110));
       current.yaw += (target.yaw - current.yaw) * follow;
       current.pitch += (target.pitch - current.pitch) * follow;
 

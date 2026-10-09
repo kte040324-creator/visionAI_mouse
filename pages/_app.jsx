@@ -6,6 +6,7 @@ import { EntryFlowProvider, useEntryFlow } from '../src/shared/EntryFlowContext'
 import { MobileLinkProvider } from '../src/shared/mobileLink/MobileLinkContext';
 import GazeReticle from '../src/shared/GazeReticle';
 import FlowIdleGuard from '../src/shared/gaze/FlowIdleGuard';
+import PresenceMiniView from '../src/shared/gaze/PresenceMiniView';
 import { CAM_COLOR, CAM_KEYS, VIEWER_BY_CAM } from '../src/shared/gaze/participants';
 import { applyRecoverySwitchFromQuery, armFlowRecovery, reportFlowError } from '../src/shared/flowRecovery';
 
@@ -96,6 +97,7 @@ function FlowRecoveryArm() {
 }
 
 function AppFrame({ Component, pageProps }) {
+  const router = useRouter();
   return (
     <>
       <Head>
@@ -105,6 +107,7 @@ function AppFrame({ Component, pageProps }) {
         <Component {...pageProps} />
       </div>
       <GlobalGazeCursor />
+      <PresenceMiniView pathname={router.pathname} />
       <FlowIdleGuard />
       <FlowRecoveryArm />
     </>

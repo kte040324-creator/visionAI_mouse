@@ -386,7 +386,7 @@
   gap: 34px;
   opacity: 0;
   transform: translateX(-50%);
-  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .turnOn,
@@ -417,7 +417,7 @@
   pointer-events: none;
   backface-visibility: hidden;
   will-change: opacity;
-  transition: opacity 1.4s cubic-bezier(0.45, 0, 0.55, 1);
+  transition: opacity 0.28s cubic-bezier(0.45, 0, 0.55, 1);
 }
 
 .profileShown {
@@ -567,6 +567,7 @@
   position: absolute;
   left: 50%;
   top: 1401px;
+  z-index: 5;
   width: max-content;
   display: flex;
   justify-content: center;
@@ -602,8 +603,8 @@
     inset 0 12px 29px rgba(255, 203, 129, 0.55),
     inset -12px -12px 23px rgba(0, 0, 0, 0.18);
   transition:
-    width 0.7s cubic-bezier(0.45, 0, 0.2, 1),
-    height 0.7s cubic-bezier(0.45, 0, 0.2, 1);
+    width 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.16s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .promptShell .promptText {
@@ -627,10 +628,11 @@
   text-shadow: 0 1px 2px rgba(40, 60, 20, 0.35);
   opacity: 0;
   transform: translate3d(-50%, -50%, 0);
-  transition: opacity 0.18s cubic-bezier(0.22, 0, 0.36, 1);
+  transition: opacity 0.12s linear;
   animation: none;
 }
 
+.promptShell .promptText[data-line='1'],
 .promptShell .promptTextOn {
   opacity: 1;
 }
@@ -717,7 +719,7 @@
 }
 
 .orbPill .orbCopy {
-  animation: copyIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.68s both;
+  animation: copyIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) 0.04s both;
 }
 
 @keyframes copyIn {
