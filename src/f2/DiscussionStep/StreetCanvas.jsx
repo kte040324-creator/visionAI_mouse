@@ -819,13 +819,14 @@ const StreetCanvas = forwardRef(function StreetCanvas({
         return { dwellProgress: 0, target: 'canvas', ...cursorPos };
       }
 
+      const pointDir = screenToWorld(norm.x, norm.y, view.yaw, view.pitch, view.fov, view.aspect);
       const same = pending && pending.objectId === snap.id;
       if (!same) {
         pendingRef.current = {
           objectId: snap.id,
-          direction: snap.dir,
-          anchorX: snap.sx,
-          anchorY: snap.sy,
+          direction: pointDir,
+          anchorX: norm.x,
+          anchorY: norm.y,
           since: now,
           lastInZoneAt: now,
           markId: hitMark(x, y),
@@ -834,9 +835,9 @@ const StreetCanvas = forwardRef(function StreetCanvas({
         return { dwellProgress: 0, target: 'canvas', ...cursorPos };
       }
 
-      pending.direction = snap.dir;
-      pending.anchorX = snap.sx;
-      pending.anchorY = snap.sy;
+      pending.direction = pointDir;
+      pending.anchorX = norm.x;
+      pending.anchorY = norm.y;
       pending.lastInZoneAt = now;
       const hold = holdRef.current;
       const dwellProgress = buttonDownRef.current && hold && hold.objectId === snap.id

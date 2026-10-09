@@ -60,7 +60,7 @@ const WAIT_LINE = '잠시만 기다려 주세요...';
 const ANALYZE_LINE = '토론 내용을 기반으로 지역구 추천을 위해 분석 중이에요...';
 const CLOSING_BEATS = new Set(['close', 'gather', 'wait', 'analyze']);
 const LINE_83 = '여러분이 상상한 서울의 모습, 어떻게 완성할 수 있을까요?';
-const MIC_LINE = '마이크가 켜졌어요. 음성으로 입력해주세요';
+const MIC_LINE = '마이크가 켜졌어요. 어떤 식물을 심을지 자유롭게 상상하고 음성으로 말해주세요.';
 const NABI_CALIBRATION_LINE =
   '첫 번째 참가자 NABI님, 모니터를 바라봐주세요. 시선 보정이 시작되면 진행 중에는 고개를 크게 움직이지 말고 점을 눈으로만 따라가 주세요';
 const CALIBRATION_HANDOFF_LINE =
@@ -123,7 +123,7 @@ function promptLines(text, balanced = false) {
 
 function gazeLine(cam) {
   const name = cam === 'B' ? 'SORA' : 'NABI';
-  return `안녕하세요 ${name}님. 이 광경에서 당신만의 식물을 어디에 심으면 좋을까요? 시선으로 선택 후 3초간 응시해주세요.`;
+  return `안녕하세요, ${name}님. 이 공간 속 어디에 당신만의 식물을 심어볼까요? 마우스로 원하는 영역을 선택 후 3초 동안 클릭해주세요.`;
 }
 
 function fallbackAsk(history, followUp, recentPrompts = []) {
@@ -265,7 +265,10 @@ export default function DiscussionStep({
   const [agentLine, setAgentLine] = useState('');
   const [marks, setMarks] = useState([]);
   const [gazeOpen, setGazeOpen] = useState(false);
-  const [scale, setScale] = useState(readStageScale);
+  // 서버는 window 가 없어 배율이 1이다. 첫 값도 1로 맞춰야
+  // 클라이언트 배율로 다시 그려진다. 여기서 창 크기를 읽으면
+  // 상태가 이미 같아서 구슬·안내 바가 디자인 원본 크기로 남는다.
+  const [scale, setScale] = useState(1);
   const [calibrationFlow, setCalibrationFlow] = useState('checking');
   const [calibrationOrbSettled, setCalibrationOrbSettled] = useState(false);
   const [calibrationGuideReady, setCalibrationGuideReady] = useState(false);
