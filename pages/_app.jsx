@@ -85,28 +85,6 @@ class FlowErrorBoundary extends ReactComponent {
   }
 }
 
-/**
- * 관람객이 쓰는 화면에서는 OS 마우스 포인터를 감춘다. 조작은 시선으로만 하고
- * 화면에 보이는 커서는 시선 커서 하나뿐이게 둔다. 브라우저 바깥(크롬 UI·바탕화면)은 그대로다.
- * 손으로 눌러야 하는 화면(보정·모바일·확인용 페이지)과 ?mouse=1 일 때는 그대로 보인다.
- */
-const POINTER_PATHS = ['/app', '/mobile', '/mobile/card', '/presence_test'];
-
-function HideMousePointer() {
-  const router = useRouter();
-  const mouseQuery = router.query?.mouse;
-  const keepPointer =
-    POINTER_PATHS.includes(router.pathname) || mouseQuery === '1' || mouseQuery === 'true';
-
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.toggle('hide-mouse-pointer', !keepPointer);
-    return () => root.classList.remove('hide-mouse-pointer');
-  }, [keepPointer]);
-
-  return null;
-}
-
 /** 전역 오류(JS 예외·Promise 거부) 감지를 켠다. ?recover=0/1 로 끄고 켤 수 있다. */
 function FlowRecoveryArm() {
   const router = useRouter();
@@ -129,7 +107,6 @@ function AppFrame({ Component, pageProps }) {
       <GlobalGazeCursor />
       <FlowIdleGuard />
       <FlowRecoveryArm />
-      <HideMousePointer />
     </>
   );
 }

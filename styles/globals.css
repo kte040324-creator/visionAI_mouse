@@ -14,15 +14,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/*
- * 관람객 화면에서는 OS 마우스 포인터를 감춘다(_app.jsx 가 경로를 보고 붙인다).
- * cursor 는 상속되므로, 눌러야 하는 요소가 따로 cursor 를 지정하면 거기서는 다시 보인다.
- */
-html.hide-mouse-pointer,
-html.hide-mouse-pointer body {
-  cursor: none;
-}
-
 button,
 input,
 select {
