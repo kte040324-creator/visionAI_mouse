@@ -819,14 +819,13 @@ const StreetCanvas = forwardRef(function StreetCanvas({
         return { dwellProgress: 0, target: 'canvas', ...cursorPos };
       }
 
-      const pointDir = screenToWorld(norm.x, norm.y, view.yaw, view.pitch, view.fov, view.aspect);
       const same = pending && pending.objectId === snap.id;
       if (!same) {
         pendingRef.current = {
           objectId: snap.id,
-          direction: pointDir,
-          anchorX: norm.x,
-          anchorY: norm.y,
+          direction: snap.dir.slice(),
+          anchorX: snap.sx,
+          anchorY: snap.sy,
           since: now,
           lastInZoneAt: now,
           markId: hitMark(x, y),
@@ -835,9 +834,6 @@ const StreetCanvas = forwardRef(function StreetCanvas({
         return { dwellProgress: 0, target: 'canvas', ...cursorPos };
       }
 
-      pending.direction = pointDir;
-      pending.anchorX = norm.x;
-      pending.anchorY = norm.y;
       pending.lastInZoneAt = now;
       const hold = holdRef.current;
       const dwellProgress = buttonDownRef.current && hold && hold.objectId === snap.id
@@ -911,11 +907,13 @@ const StreetCanvas = forwardRef(function StreetCanvas({
       if (event.button !== 0 || event.pointerType === 'touch') return;
       if (introLockRef.current || phaseRef.current !== 'gaze') return;
       if (!screenToNormalized(event.clientX, event.clientY)) return;
+      holdLookRef.current = true;
       buttonDownRef.current = true;
       applyPoint(event.clientX, event.clientY, 'pointer');
     };
     const onUp = () => {
       if (!buttonDownRef.current) return;
+      holdLookRef.current = false;
       stopHold();
     };
     let frame = 0;
@@ -1050,11 +1048,7 @@ const StreetCanvas = forwardRef(function StreetCanvas({
                 markRefs.current[mark.id] = el;
               }}
               className={`${styles.plantMark} ${mark.cam === 'B' ? styles.markB : styles.markA} ${quiet ? styles.markQuiet : ''} ${gather ? styles.markGather : ''} ${mark.tucked ? styles.markTuck : ''}`}
-              style={{
-                left: `${(mark.nx ?? 0.5) * 100}%`,
-                top: `${(mark.ny ?? 0.5) * 100}%`,
-                ...(gather ? { opacity: 0 } : {}),
-              }}
+              style={gather ? { opacity: 0 } : undefined}
             >
               <span className={styles.badge}>
                 {mark.cam === 'B' ? <SoraBadge uid={`sora-${mark.id}`} /> : <NabiBadge uid={`nabi-${mark.id}`} />}

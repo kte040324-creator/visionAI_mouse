@@ -6,9 +6,8 @@ import { PRESENCE } from './presence';
 import usePresenceLink from './usePresenceLink';
 
 /**
- * 체험 흐름(/1~/5)에서 통과 인원이 2명 아래로 30초 유지되면 /pre_opening 으로 되돌린다.
- * 마우스·시선·가만히 서 있는 것은 복귀 조건이 아니다. 2명이 엔딩을 보고 있어도 그대로 둔다.
- * 인원 수는 /presence_test 가 보내는 통과 인원과 같다.
+ * 체험 흐름(/1~/5)에서 앞에 선 사람이 0명 또는 1명으로 30초 유지되면 /pre_opening 으로 되돌린다.
+ * 2명 이상이면 인터랙션이 없어도 진행을 유지한다. 고개가 정면이 아니어도 앞에 있으면 인원으로 센다.
  *
  * 판정 상태를 보려면 주소에 ?idleDebug=1 을 붙인다(브라우저에 기억됨). ?idleDebug=0 으로 끈다.
  */
@@ -59,8 +58,14 @@ export default function FlowIdleGuard() {
 
   const onMessage = useCallback((msg) => {
     const state = msg.type === 'state' ? msg : msg.type === 'joined' && msg.state ? msg.state : null;
-    if (!state || typeof state.kept !== 'number') return;
-    keptRef.current = state.kept;
+    if (!state) return;
+    const count = typeof state.near === 'number'
+      ? state.near
+      : typeof state.faces === 'number'
+        ? state.faces
+        : state.kept;
+    if (typeof count !== 'number') return;
+    keptRef.current = count;
   }, []);
 
   const link = usePresenceLink('display', onMessage);
@@ -85,7 +90,7 @@ export default function FlowIdleGuard() {
       const count = keptRef.current;
       setDebugText([
         `감시 ${active ? router.pathname : '꺼짐 (' + router.pathname + ')'} · 센서 ${link.connected ? '연결됨' : '끊김'}`,
-        count == null ? '통과 인원 신호 없음' : `통과 ${count}명 (필요 ${PRESENCE.people}명)`,
+        count == null ? '앞에 선 인원 신호 없음' : `앞에 선 사람 ${count}명 (필요 ${PRESENCE.people}명)`,
         `2명 미만 ${seconds(belowFor)} (복귀 ${seconds(IDLE_RESET.awayMs)})`,
       ].join('\n'));
     }, 250);

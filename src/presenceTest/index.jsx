@@ -218,7 +218,13 @@ export default function PresenceTest() {
 
         if (now - lastSentAt >= STATE_SEND_MS) {
           lastSentAt = now;
-          sendRef.current({ type: 'state', faces: faces.length, kept: kept.length, progress });
+          sendRef.current({
+            type: 'state',
+            faces: faces.length,
+            near: faces.filter((face) => face.near).length,
+            kept: kept.length,
+            progress,
+          });
         }
 
         // 통과하면 디스플레이(/pre_opening)에 신호만 보내고, 이 페이지는 계속 인식한다.
