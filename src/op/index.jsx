@@ -21,16 +21,6 @@ const TELLS = [
     ),
   },
   {
-    id: 8,
-    text: (
-      <>
-        우리가 바라보는 <b>시선 끝에는 모두 각자의 관심</b>이 담겨 있습니다
-        <br />
-        그 시선과 목소리를 따라 내가 원하는 식물을 도시 곳곳에 더해보세요
-      </>
-    ),
-  },
-  {
     id: 9,
     text: (
       <>
@@ -44,26 +34,20 @@ const TELLS = [
 
 const OPENING_SPEECH = {
   7: '아스팔트와 콘크리트로 가득한 서울 속에, 조금 더 많은 자연이 더해진다면 어떤 모습일까요?',
-  8: '우리가 바라보는 시선 끝에는 모두 각자의 관심이 담겨 있습니다. 그 시선과 목소리를 따라 내가 원하는 식물을 도시 곳곳에 더해보세요.',
   9: '한 사람의 관심에서 시작된 작은 상상이 모이고 모여, 서울의 풍경을 바꾸고 자연과 공존하는 서울을 만들어갑니다.',
-  13: '여러분이 상상하는 서울은 어떤 모습인가요?',
   14: '이제 상상하는 서울을 직접 그려볼 시간이에요.',
   15: '먼저, 여러분이 생각하는 서울의 모습을 이야기하며 서로의 생각을 나눠볼게요.',
 };
 const OPENING_SPEECH_FRAMES = Object.keys(OPENING_SPEECH).map(Number);
 const SPEECH_START_MS = 1800;
+// 이 프레임들은 문구를 뺐으므로 건너뛴다. 앞뒤 프레임의 배경·에이전트 전환은 CSS 가 그대로 이어 준다.
+const SKIPPED_FRAMES = new Set([8, 13]);
+function nextFrame(frame) {
+  let next = frame + 1;
+  while (SKIPPED_FRAMES.has(next)) next += 1;
+  return next;
+}
 const LEAD = [
-  {
-    kind: 'tell',
-    speech: '온시를 통해 앞으로 우리가 만들어갈 서울이 어떤 모습으로 변화할 수 있을지 만나볼 수 있어요.',
-    text: (
-      <>
-        <b>ONSI</b>를 통해 앞으로 우리가 만들어갈 서울이
-        <br />
-        어떤 모습으로 변화할 수 있을지 만나볼 수 있어요
-      </>
-    ),
-  },
   {
     kind: 'ask',
     speech: '그럼 시작해볼까요?',
@@ -125,7 +109,6 @@ function plainOpacity(frame) {
   if (frame <= 1) return 0;
   if (frame >= 2 && frame <= 5) return 1;
   if (frame === 6 || frame === 7) return 0.7;
-  if (frame === 8) return 0.29;
   return 0;
 }
 
@@ -147,12 +130,12 @@ function holdFor(frame) {
   if (frame === 18) return 1700;
   if (frame === 19) return 1500;
   if (frame === 10) return 400;
-  if ([7, 8, 9, 13, 14, 15].includes(frame)) return 6800;
+  if ([7, 9, 14, 15].includes(frame)) return 6800;
   return HOLD_MS;
 }
 
 function agentSpeaking(frame) {
-  return [1, 2, 7, 8, 9, 13, 14, 15].includes(frame);
+  return [1, 2, 7, 9, 14, 15].includes(frame);
 }
 
 export default function Opening() {
@@ -239,7 +222,7 @@ export default function Opening() {
         speechOutputRef.current.speak(speechLine, () => {
           if (cancelled) return;
           advanceTimer = window.setTimeout(() => {
-            setFrame((current) => (current === frame ? current + 1 : current));
+            setFrame((current) => (current === frame ? nextFrame(current) : current));
           }, 500);
         });
       }, SPEECH_START_MS);
@@ -268,7 +251,7 @@ export default function Opening() {
         setLead(0);
         return;
       }
-      setFrame((current) => current + 1);
+      setFrame((current) => nextFrame(current));
     }, holdFor(frame));
     return () => window.clearTimeout(timer);
   }, [frame, router]);
@@ -315,11 +298,6 @@ export default function Opening() {
           <div className={`${styles.pill} ${styles.pillAsk} ${frame === 15 ? styles.copyOn : ''}`}>
             <p className={styles.askCopy} aria-hidden="true">
               먼저, 여러분이 생각하는 서울의 모습을 <b>이야기하며 서로의 생각을 나눠볼게요</b>
-            </p>
-          </div>
-          <div className={`${styles.pill} ${styles.pillAsk} ${frame === 13 ? styles.copyOn : ''}`}>
-            <p className={styles.askCopy} aria-hidden="true">
-              여러분이 <b>상상하는 서울</b>은 어떤 모습인가요?
             </p>
           </div>
           {LEAD.map((line, index) => (
