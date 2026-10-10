@@ -46,17 +46,15 @@ function readStageScale() {
 }
 const AFTER_LINE_MS = 0;
 const VEIL_FADE_MS = 1150;
-const AFTER_VEIL_MS = 1000;
-
 function spokenHoldMs(text) {
   const chars = Array.from(text.replace(/\s/g, '')).length;
   return Math.max(1600, chars * 240);
 }
 const AFTER_USER_MS = 0;
 const MIC_LIMIT_MS = 10000;
-// 말이 확정된 뒤 넘기기까지의 대기. 아직 말하는 중(중간 인식)이면 더 길게 기다린다.
-const AFTER_FINAL_MS = 800;
-const AFTER_INTERIM_MS = 1600;
+// 인식 결과가 마지막으로 들어온 뒤 이만큼 조용해야 대답을 확정한다. 말 중간에 잠깐 쉬어도 끊지 않는다.
+const AFTER_FINAL_MS = 1500;
+const AFTER_INTERIM_MS = 2000;
 const INTRO_LINE = '함께 선택해주신 이 서울을 실현하기 위해, 삭막한 지금의 거리에서 식물이 필요한 곳을 차례대로 바라보며 토론을 통해 의견을 나눠볼게요';
 const CLOSE_LINE = '토론이 종료 되었어요. 이제 의견을 모아볼게요!';
 const WAIT_LINE = '잠시만 기다려 주세요...';
@@ -444,7 +442,7 @@ export default function DiscussionStep({
     window.clearTimeout(dockTimerRef.current);
     dockTimerRef.current = window.setTimeout(() => {
       if (aliveRef.current) setBeat('dock');
-    }, 2600);
+    }, VEIL_FADE_MS);
   }, [reportStreetUnveiled]);
 
   useEffect(() => {
@@ -664,32 +662,11 @@ export default function DiscussionStep({
 
   useEffect(() => {
     if (beat === 'dock') {
-      let started = false;
-      let delayTimer = 0;
-      const startLine = () => {
-        if (started || beatRef.current !== 'dock') return;
-        started = true;
-        say('dock', LINE_83, () => {
-          if (beatRef.current === 'dock') setBeat('gaze');
-        });
-      };
-      const arm = () => {
-        window.clearTimeout(delayTimer);
-        delayTimer = window.setTimeout(startLine, AFTER_VEIL_MS);
-      };
-      const veil = veilRef.current;
-      const onFade = (event) => {
-        if (event.target !== veil || event.propertyName !== 'opacity') return;
-        veil.removeEventListener('transitionend', onFade);
-        arm();
-      };
-      veil?.addEventListener('transitionend', onFade);
-      const fallback = window.setTimeout(arm, VEIL_FADE_MS);
-      return () => {
-        window.clearTimeout(fallback);
-        window.clearTimeout(delayTimer);
-        veil?.removeEventListener('transitionend', onFade);
-      };
+      setAgentLine(LINE_83);
+      say('dock', LINE_83, () => {
+        if (beatRef.current === 'dock') setBeat('gaze');
+      });
+      return undefined;
     }
     if (beat === 'gaze') {
       const cam = speakerRef.current.cam;
@@ -1025,7 +1002,10 @@ export default function DiscussionStep({
       const trimmed = fullText.trim();
       if (!trimmed) return;
       window.clearTimeout(submitTimerRef.current);
-      submitTimerRef.current = window.setTimeout(() => finishRef.current(trimmed, false), AFTER_FINAL_MS);
+      submitTimerRef.current = window.setTimeout(
+        () => finishRef.current(speechRef.current.getCombinedText(), false),
+        AFTER_FINAL_MS
+      );
     },
     onTranscriptUpdate: (combined, finalText, interimText) => {
       if (!USER_BEATS.has(beatRef.current) || guideRef.current.playing || !interimText.trim()) return;
