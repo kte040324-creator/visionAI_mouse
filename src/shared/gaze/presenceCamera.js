@@ -65,7 +65,7 @@ function startSession(camera) {
       } catch {
         result = null;
       }
-      if (result) emit({ status: 'watching', result, now });
+      if (result) emit({ status: 'watching', result, now, video });
     }
     timer = window.setTimeout(step, PRESENCE.intervalMs);
   };
