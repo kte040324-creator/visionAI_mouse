@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+// 임시 진단: 인식 이벤트를 서버 접속 기록(server.log)에 남긴다. 화면에는 아무것도 띄우지 않는다.
+function micTrace(event, detail = '') {
+  try {
+    const query = new URLSearchParams({ ev: event, d: String(detail).slice(0, 80), t: String(Date.now()) });
+    fetch(`/__mic-trace?${query.toString()}`, { keepalive: true }).catch(() => {});
+  } catch {
+    /* 진단 기록 실패는 무시 */
+  }
+}
+
 export function useSpeechInput({ onFinalTranscript, onTranscriptUpdate } = {}) {
   const [transcript, setTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
@@ -25,7 +35,7 @@ export function useSpeechInput({ onFinalTranscript, onTranscriptUpdate } = {}) {
     if (!meter) return;
     window.cancelAnimationFrame(meter.frame);
     meter.stream.getTracks().forEach((track) => track.stop());
-    meter.ctx.close();
+    meter.ctx.close().catch(() => {});
   }, []);
 
   const startMeter = useCallback(async () => {
@@ -33,8 +43,9 @@ export function useSpeechInput({ onFinalTranscript, onTranscriptUpdate } = {}) {
     const gen = meterGenRef.current + 1;
     meterGenRef.current = gen;
     try {
+      // 음량 표시 전용. 자동 음량 조절을 켜면 Chrome 이 시스템 마이크 음량을 낮춰 음성 인식까지 작게 듣는다.
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         video: false,
       });
       if (meterGenRef.current !== gen || !shouldListenRef.current) {
@@ -111,6 +122,7 @@ export function useSpeechInput({ onFinalTranscript, onTranscriptUpdate } = {}) {
         }
       }
 
+      micTrace(finalText ? 'final' : 'interim', finalText || interimText);
       if (finalText) {
         transcriptRef.current = `${transcriptRef.current}${finalText}`.trim();
         setTranscript(transcriptRef.current);
@@ -122,25 +134,42 @@ export function useSpeechInput({ onFinalTranscript, onTranscriptUpdate } = {}) {
       emitTranscriptUpdate();
     };
 
+    recognition.onstart = () => micTrace('start');
+    recognition.onaudiostart = () => micTrace('audiostart');
+    recognition.onspeechstart = () => micTrace('speechstart');
     recognition.onerror = (event) => {
+      micTrace('error', event.error);
       if (event.error !== 'no-speech' && event.error !== 'aborted') {
         setError(event.error);
       }
     };
 
     recognition.onend = () => {
+      micTrace('end', shouldListenRef.current ? 'restart' : 'stop');
       if (shouldListenRef.current && recognitionRef.current) {
-        window.setTimeout(() => {
-          if (!shouldListenRef.current || !recognitionRef.current) return;
-          try {
-            recognitionRef.current.start();
-            isListeningRef.current = true;
-            setIsListening(true);
-          } catch {
-            isListeningRef.current = false;
-            setIsListening(false);
-          }
-        }, 180);
+        const restart = (attempt) => {
+          window.setTimeout(() => {
+            if (!shouldListenRef.current || !recognitionRef.current) return;
+            try {
+              recognitionRef.current.start();
+              isListeningRef.current = true;
+              setIsListening(true);
+            } catch (error) {
+              if (error?.name === 'InvalidStateError') {
+                isListeningRef.current = true;
+                setIsListening(true);
+                return;
+              }
+              if (attempt < 6) {
+                restart(attempt + 1);
+                return;
+              }
+              isListeningRef.current = false;
+              setIsListening(false);
+            }
+          }, 180 * (attempt + 1));
+        };
+        restart(0);
         return;
       }
       setIsListening(false);
@@ -157,6 +186,7 @@ export function useSpeechInput({ onFinalTranscript, onTranscriptUpdate } = {}) {
   }, [emitTranscriptUpdate, stopMeter]);
 
   const stopListening = useCallback(() => {
+    if (shouldListenRef.current) micTrace('stop');
     shouldListenRef.current = false;
     recognitionRef.current?.stop();
     isListeningRef.current = false;
@@ -170,13 +200,15 @@ export function useSpeechInput({ onFinalTranscript, onTranscriptUpdate } = {}) {
     setError(null);
     shouldListenRef.current = true;
 
+    micTrace('listen');
     const tryStart = (attempt = 0) => {
       try {
         recognition.start();
         isListeningRef.current = true;
         setIsListening(true);
         return true;
-      } catch {
+      } catch (error) {
+        micTrace('start-fail', `${error?.name} #${attempt}`);
         if (attempt >= 6) {
           isListeningRef.current = false;
           setIsListening(false);

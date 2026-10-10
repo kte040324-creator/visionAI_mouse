@@ -54,6 +54,9 @@ function spokenHoldMs(text) {
 }
 const AFTER_USER_MS = 0;
 const MIC_LIMIT_MS = 10000;
+// 말이 확정된 뒤 넘기기까지의 대기. 아직 말하는 중(중간 인식)이면 더 길게 기다린다.
+const AFTER_FINAL_MS = 800;
+const AFTER_INTERIM_MS = 1600;
 const INTRO_LINE = '함께 선택해주신 이 서울을 실현하기 위해, 삭막한 지금의 거리에서 식물이 필요한 곳을 차례대로 바라보며 토론을 통해 의견을 나눠볼게요';
 const CLOSE_LINE = '토론이 종료 되었어요. 이제 의견을 모아볼게요!';
 const WAIT_LINE = '잠시만 기다려 주세요...';
@@ -119,6 +122,26 @@ function promptLines(text, balanced = false) {
   const spaceAt = nearestBreak(chars, /\s/);
   if (spaceAt > 0) return splitPrompt(chars, spaceAt);
   return splitPrompt(chars, Math.round(chars.length / 2));
+}
+
+// 안내 음성이 나오는 동안에도 마이크를 켜 두므로, 스피커 소리가 인식된 앞부분(안내 문장과 같은 단어들)을 떼어 낸다.
+function stripGuide(text, guide) {
+  const value = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!guide || !value) return value;
+  const clean = (word) => String(word || '').replace(/[.,?!…]/g, '');
+  const guideBlob = clean(guide).replace(/\s/g, '');
+  const inGuide = (word) => Array.from(word).length >= 2 && guideBlob.includes(word);
+  const tokens = value.split(' ');
+  let cut = 0;
+  for (let i = 0; i < tokens.length; i += 1) {
+    if (inGuide(clean(tokens[i]))) {
+      cut = i + 1;
+      continue;
+    }
+    if (cut >= 1 && i + 1 < tokens.length && inGuide(clean(tokens[i + 1]))) continue;
+    break;
+  }
+  return tokens.slice(cut).join(' ').trim();
 }
 
 function gazeLine(cam) {
@@ -280,6 +303,7 @@ export default function DiscussionStep({
   const speakerRef = useRef(SPEAKERS[0]);
   const committedRef = useRef(false);
   const submitTimerRef = useRef(null);
+  const guideRef = useRef({ text: '', playing: false });
   const queueRef = useRef([]);
   const pumpingRef = useRef(false);
   const hangRef = useRef(0);
@@ -686,14 +710,33 @@ export default function DiscussionStep({
     }
     if (beat === 'speak') {
       let micArmed = false;
+      let micEarly = false;
+      const listenEarly = () => {
+        if (micEarly || micArmed || beatRef.current !== 'speak') return;
+        micEarly = true;
+        guideRef.current = { text: MIC_LINE, playing: true };
+        speechRef.current.clearTranscript();
+        speechRef.current.startListening();
+      };
       const openMic = () => {
         if (micArmed || beatRef.current !== 'speak') return;
         micArmed = true;
-        speechRef.current.clearTranscript();
-        speechRef.current.startListening();
+        if (micEarly) {
+          guideRef.current = { text: MIC_LINE, playing: false };
+          if (stripGuide(speechRef.current.getCombinedText(), MIC_LINE)) {
+            window.clearTimeout(submitTimerRef.current);
+            submitTimerRef.current = window.setTimeout(
+              () => finishRef.current(speechRef.current.getCombinedText(), false),
+              AFTER_INTERIM_MS
+            );
+          }
+        } else {
+          speechRef.current.clearTranscript();
+          speechRef.current.startListening();
+        }
         armMicLimit();
       };
-      say(`speak-${speakerRef.current.cam}`, MIC_LINE, openMic, openMic);
+      say(`speak-${speakerRef.current.cam}`, MIC_LINE, openMic, openMic, false, true, listenEarly);
       return undefined;
     }
     if (beat === 'fold') {
@@ -773,9 +816,7 @@ export default function DiscussionStep({
       setMarks((prev) => prev.map((mark) => ({ ...mark, tucked: true })));
       say('f1-summary', summaryRef.current, () => {
         if (beatRef.current !== 'f1Summary') return;
-        zoneRef.current = 0;
-        setSpeakerIndex(FLOW1_ZONES[0].speaker);
-        setBeat('f1Gaze');
+        setBeat('close');
       });
       return undefined;
     }
@@ -830,6 +871,7 @@ export default function DiscussionStep({
         const line = await fetchEchoLine(last?.text || '', historyRef.current);
         if (cancelled || beatRef.current !== beat) return;
         historyRef.current = [...historyRef.current, { role: 'assistant', text: line }];
+        setAgentLine(line);
         say(`f1-${kind}-${zone.id}`, line, () => {
           if (beatRef.current !== beat) return;
           if (beat === 'f1React') {
@@ -912,9 +954,11 @@ export default function DiscussionStep({
 
   const finishUserTurn = useCallback((text, immediate) => {
     if (committedRef.current || !USER_BEATS.has(beatRef.current)) return;
-    const trimmed = (text || '').trim();
+    if (guideRef.current.playing && !immediate) return;
+    const trimmed = stripGuide(text, guideRef.current.text);
     if (!trimmed && !immediate) return;
     committedRef.current = true;
+    guideRef.current = { text: '', playing: false };
     window.clearTimeout(submitTimerRef.current);
     window.clearTimeout(micLimitRef.current);
     const current = beatRef.current;
@@ -977,11 +1021,19 @@ export default function DiscussionStep({
 
   const speech = useSpeechInput({
     onFinalTranscript: (fullText) => {
-      if (!USER_BEATS.has(beatRef.current)) return;
+      if (!USER_BEATS.has(beatRef.current) || guideRef.current.playing) return;
       const trimmed = fullText.trim();
       if (!trimmed) return;
       window.clearTimeout(submitTimerRef.current);
-      submitTimerRef.current = window.setTimeout(() => finishRef.current(trimmed, false), 1800);
+      submitTimerRef.current = window.setTimeout(() => finishRef.current(trimmed, false), AFTER_FINAL_MS);
+    },
+    onTranscriptUpdate: (combined, finalText, interimText) => {
+      if (!USER_BEATS.has(beatRef.current) || guideRef.current.playing || !interimText.trim()) return;
+      window.clearTimeout(submitTimerRef.current);
+      submitTimerRef.current = window.setTimeout(
+        () => finishRef.current(speechRef.current.getCombinedText(), false),
+        AFTER_INTERIM_MS
+      );
     },
   });
   const speechRef = useRef(speech);

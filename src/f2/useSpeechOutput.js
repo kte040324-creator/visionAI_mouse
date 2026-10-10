@@ -96,7 +96,9 @@ export function useSpeechOutput() {
       window.cancelAnimationFrame(levelLoopRef.current);
       voiceLiveRef.current = false;
       voiceLevelRef.current = 0;
-      audioCtxRef.current?.close?.();
+      audioCtxRef.current?.close?.()?.catch?.(() => {});
+      audioCtxRef.current = null;
+      analyserRef.current = null;
       if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
     };
   }, [clearUnlock, stopAudio]);

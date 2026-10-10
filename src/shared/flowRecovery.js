@@ -35,6 +35,7 @@ const IGNORED_MESSAGES = [
   'AbortError', // video.play() 가 다른 재생 요청에 밀려 중단됨
   'The play() request was interrupted',
   'NotAllowedError', // 자동 재생 차단. 다른 곳에서 사용자 제스처를 기다린다.
+  'Transition was aborted', // 화면 전환 애니메이션이 늦어 취소됨. 페이지 이동은 그대로 끝난다.
 ];
 
 let armed = false;

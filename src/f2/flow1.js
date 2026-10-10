@@ -168,9 +168,9 @@ export async function fetchReplyKeyword(answer, question, followUp) {
 }
 
 export async function fetchEchoLine(text, history) {
-  const line = withoutQuestion(await postAgent({
+  const line = withoutQuestion(await postAgentTimed({
     beat: 'flow1-echo',
     history: history || [],
-  }));
+  }, 2500));
   return line || echoFallback(text);
 }
